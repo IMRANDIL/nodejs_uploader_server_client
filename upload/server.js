@@ -2,17 +2,34 @@ const net = require("net");
 const fs = require("fs/promises");
 const server = net.createServer(() => {});
 
+let fileHandle, fileWriteStream;
+
 server.on("connection", (socket) => {
   console.log("new connection");
 
   socket.on("data", async (data) => {
-    const fileHandle = await fs.open(`storage/upload.txt`, "w");
-    const fileWriteStream = fileHandle.createWriteStream();
-    if (!fileWriteStream.write(data)) {
-      socket.pause();
+    if (!fileHandle) {
+      fileHandle = await fs.open(`storage/upload.txt`, "w");
+      fileWriteStream = fileHandle.createWriteStream();
+
+      fileWriteStream.write(data);
+
+      fileWriteStream.on('finish', () => {
+        fileHandle.close().then(() => {
+          fileHandle = undefined;
+          fileWriteStream = undefined;
+          console.log('File handle closed.');
+        }).catch((err) => {
+          console.error('Error closing file handle:', err);
+        });
+      });
+    } else {
+      fileWriteStream.write(data);
     }
-    socket.resume();
-    fileWriteStream.write(data);
+  });
+
+  socket.on("end", () => {
+    console.log("connection ended");
   });
 });
 
