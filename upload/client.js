@@ -12,7 +12,7 @@ if (process.argv.length !== 3) {
 
 const filePath = process.argv[2];
 
-const fileName = path.basename(filePath)
+const fileName = path.basename(filePath);
 
 const client = net.createConnection(
   {
@@ -22,23 +22,22 @@ const client = net.createConnection(
   async () => {
     try {
       // Send the file extension as part of the data
+      client.write(`fileName:${fileName}-----`);
 
       const fileHandle = await fs.open(filePath, "r");
       const fileReadStream = fileHandle.createReadStream();
 
-     // client.write(`fileName:${fileName}-----`);
-
       fileReadStream.on("data", (data) => {
-        // Send each chunk of data to the server
-        if (!client.write(data)) {
+        const canWriteMore = client.write(data);
+
+        if (!canWriteMore) {
           // If the server's buffer is full, pause reading from the file
           fileReadStream.pause();
+          client.once("drain", () => {
+            // When the server's buffer is drained, resume reading from the file
+            fileReadStream.resume();
+          });
         }
-      });
-
-      client.on("drain", () => {
-        // When the server's buffer is drained, resume reading from the file
-        fileReadStream.resume();
       });
 
       fileReadStream.on("end", () => {

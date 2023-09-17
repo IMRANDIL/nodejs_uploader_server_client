@@ -4,16 +4,24 @@ const server = net.createServer(() => {});
 
 server.on("connection", async (socket) => {
   console.log("new connection");
+  let fileHandle, fileWriteStream;
+  let fileName, indexDivider; // Define fileName here
 
-  try {
-    // You can keep the file name as provided by the client or generate a unique name.
-    // In this example, we'll keep the original file name sent by the client.
-    const fileName = `storage/upload_${Date.now()}.bin`; // You can generate a unique name or use the original name
+  socket.on("data", async (data) => {
+    if (!fileName) {
+      indexDivider = data.indexOf('-----');
+      if (indexDivider !== -1) {
+        console.log(indexDivider);
+        fileName = data.subarray(9, indexDivider).toString();
+        fileHandle = await fs.open(`storage/${fileName}`, "w"); // Open the file for writing
+        fileWriteStream = fileHandle.createWriteStream();
+        
+        // Adjust the index to start copying data after the "-----" delimiter
+        data = data.subarray(indexDivider + 5);
+      }
+    }
 
-    const fileHandle = await fs.open(fileName, "w"); // Open the file for writing
-    const fileWriteStream = fileHandle.createWriteStream();
-
-    socket.on("data", (data) => {
+    if (fileWriteStream && indexDivider !== -1) {
       if (!fileWriteStream.write(data)) {
         socket.pause();
       }
@@ -21,10 +29,12 @@ server.on("connection", async (socket) => {
       fileWriteStream.once('drain', () => {
         socket.resume();
       });
-    });
+    }
+  });
 
-    socket.on("end", () => {
-      console.log("connection ended");
+  socket.on("end", () => {
+    console.log("connection ended");
+    if (fileWriteStream) {
       fileWriteStream.end(() => {
         fileHandle.close().then(() => {
           console.log('File handle closed.');
@@ -32,10 +42,8 @@ server.on("connection", async (socket) => {
           console.error('Error closing file handle:', err);
         });
       });
-    });
-  } catch (error) {
-    console.error('Error opening file:', error);
-  }
+    }
+  });
 });
 
 server.listen(7000, "127.0.0.1", () => {
