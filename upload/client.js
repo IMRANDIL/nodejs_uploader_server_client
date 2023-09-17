@@ -11,14 +11,21 @@ const client = net.createConnection(
     const fileReadStream = fileHandle.createReadStream();
 
     fileReadStream.on("data", (data) => {
-      client.write(data)
+      // Send each chunk of data to the server
+      if (!client.write(data)) {
+        // If the server's buffer is full, pause reading from the file
+        fileReadStream.pause();
+      }
     });
 
-    
-    fileReadStream.on('end', ()=>{
-        console.log('file has successfully uploaded!');
-         client.end()
-    })
+    client.on("drain", () => {
+      // When the server's buffer is drained, resume reading from the file
+      fileReadStream.resume();
+    });
 
+    fileReadStream.on('end', () => {
+      console.log('File has been successfully uploaded!');
+      client.end(); // Close the connection when done sending data
+    });
   }
 );

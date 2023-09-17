@@ -2,35 +2,36 @@ const net = require("net");
 const fs = require("fs/promises");
 const server = net.createServer(() => {});
 
-let fileHandle, fileWriteStream;
-
-server.on("connection", (socket) => {
+server.on("connection", async (socket) => {
   console.log("new connection");
 
-  socket.on("data", async (data) => {
-    if (!fileHandle) {
-      fileHandle = await fs.open(`storage/upload.txt`, "w");
-      fileWriteStream = fileHandle.createWriteStream();
+  try {
+    const fileHandle = await fs.open(`storage/upload.txt`, "w");
+    const fileWriteStream = fileHandle.createWriteStream();
 
-      fileWriteStream.write(data);
+    socket.on("data", (data) => {
+      if (!fileWriteStream.write(data)) {
+        socket.pause();
+      }
 
-      fileWriteStream.on('finish', () => {
+      fileWriteStream.once('drain', () => {
+        socket.resume();
+      });
+    });
+
+    socket.on("end", () => {
+      console.log("connection ended");
+      fileWriteStream.end(() => {
         fileHandle.close().then(() => {
-          fileHandle = undefined;
-          fileWriteStream = undefined;
           console.log('File handle closed.');
         }).catch((err) => {
           console.error('Error closing file handle:', err);
         });
       });
-    } else {
-      fileWriteStream.write(data);
-    }
-  });
-
-  socket.on("end", () => {
-    console.log("connection ended");
-  });
+    });
+  } catch (error) {
+    console.error('Error opening file:', error);
+  }
 });
 
 server.listen(7000, "127.0.0.1", () => {
